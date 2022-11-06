@@ -10,7 +10,7 @@ from models.dataset_classes import *
 
 # configurations which can be replaced by config file later on
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-model = UNet2DRemake()
+model = UNet2DRemake().model
 loss = smpu.losses.DiceLoss()
 metrics = [smpu.metrics.IoU(threshold=0.5), ]
 
@@ -20,13 +20,12 @@ batch_size = 16
 epochs_to_decay = 50
 reduced_lr = 1e-5
 
-optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.001), ])
+optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.005), ])
 
 # set up training and validation
 train_epoch = smpu.train.TrainEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer,
                                     device=device, verbose=True)
-valid_epoch = smpu.train.ValidEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer,
-                                    device=device, verbose=True)
+valid_epoch = smpu.train.ValidEpoch(model=model, loss=loss, metrics=metrics, device=device, verbose=True)
 # set up k-fold cross validation
 k = 5
 splits = KFold(n_splits=k, shuffle=True, random_state=42)
@@ -62,9 +61,9 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
         history['train_acc'].append(train_acc)
         history['val_acc'].append(val_acc)
 
-        if (epoch + 1) * (fold + 1) == epochs_to_decay:
-            optimizer.param_groups[0]['lr'] = reduced_lr
-            print('Decrease decoder learning rate to {}!'.format(reduced_lr))
+        # if fold * num_epochs + epoch + 1 == epochs_to_decay:
+        #     optimizer.param_groups[0]['lr'] = reduced_lr
+        #     print('Decrease decoder learning rate to {}!'.format(reduced_lr))
 
     foldperf['fold{}'.format(fold + 1)] = history
 
