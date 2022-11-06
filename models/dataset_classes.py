@@ -20,14 +20,14 @@ class SpinalCordDataset(Dataset, ABC):
     def __len__(self):
         return len(self.targets)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, new_shape=(1, 160, -1)):
         img_file = self.img_files[idx]
         image = img_file.data
         label = self.targets[idx].data
         if self.transform:
-            image = self.transform(image)
+            image = self.transform(image).reshape(new_shape)
         if self.target_transform:
-            label = self.target_transform(label)
+            label = self.target_transform(label).reshape(new_shape)
         return image, label
 
 
@@ -44,9 +44,9 @@ def divide_data(image_dimensions=(160, 64, 35)):
     test_labels = []
 
     # Paths of the data
-    experiment1 = Path(op.join(sys.path[0], '../dataset/Experiment1'))
-    experiment2 = Path(op.join(sys.path[0], '../dataset/Experiment2'))
-    experiment3 = Path(op.join(sys.path[0], '../dataset/Experiment3'))
+    experiment1 = Path('dataset/Experiment1')
+    experiment2 = Path('dataset/Experiment2')
+    experiment3 = Path('dataset/Experiment3')
 
     # experiment 1 has the least number of participants, randomize indices to pick from each experiment two subjects for
     # testing
