@@ -12,4 +12,6 @@ class UNet2DRemake:
 
         self.model = smp.Unet(encoder_name=self.encoder, encoder_weights=self.encoder_weights, classes=1,
                               activation=self.activation, in_channels=1)
-        return self.model
+
+    def model(self):
+        return self.model()
