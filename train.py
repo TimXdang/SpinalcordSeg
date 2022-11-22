@@ -20,7 +20,7 @@ batch_size = 16
 epochs_to_decay = 50
 reduced_lr = 1e-5
 
-optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.005), ])
+optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.002), ])
 
 # set up training and validation
 train_epoch = smpu.train.TrainEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer,
