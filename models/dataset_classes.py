@@ -5,6 +5,7 @@ import torchio as tio
 import os.path as op
 from pathlib import Path
 import sys
+import re
 
 
 class SpinalCordDataset(Dataset, ABC):
@@ -104,3 +105,85 @@ def divide_data(image_dimensions=(160, 64, 35)):
                                  tio.CropOrPad(image_dimensions))
 
     return dataset, test_set
+
+
+class Experiment4(ABC):
+    """
+    Creates a dataset consisting of the fMRI images of one subject gained by splitting the fMRI sequence. Images for
+    which the mean mask cannot be applied have to be provided with a new mask.
+    """
+    def __init__(self, subject_path, new_labels):
+        """
+        :param subject_path: relative path to the fMRI sequence
+        :param new_labels: List of sequence numbers which have a different mask
+        """
+        single_imgs = Path(op.join(sys.path[0], subject_path + '/single_images'))
+        regex = re.compile(r'\d+')
+        cop = tio.CropOrPad((160, 64, 35))
+
+        self.subjects = []
+        # assign masks to images
+        for file in single_imgs.iterdir():
+            idx = int(regex.findall(str(file))[2])
+            if idx in new_labels:
+                label_path = op.join(sys.path[0], subject_path + f'/mask_sc_vol{idx}.nii.gz')
+            else:
+                label_path = op.join(sys.path[0], subject_path + '/mask_sc.nii.gz')
+
+            # create torchio subject instance and pad image and mask for later augmentation
+            self.subjects.append(tio.Subject(img=cop(tio.ScalarImage(file)), label=cop(tio.LabelMap(label_path))))
+
+    def create_dataset(self):
+        """
+        Applies data augmentation to the images and labels. The dataset instance from torchio is used to get the
+        inverse transformation.
+        :return: dataset
+        """
+        lateral = tio.transforms.RandomAffine(scales=(1, 1), degrees=(-3, 3), translation=0, center='image')
+        affine = tio.transforms.RandomAffine(scales=(1, 1), degrees=(-3, 3),
+                                             translation=(1.5, 2.5, 0), center='image')
+        scaling = tio.transforms.RandomAffine(scales=(1, 1.5), degrees=(0, 0), center='image', isotropic=True)
+        elastic = tio.transforms.RandomElasticDeformation(num_control_points=(5, 10, 10),
+                                                          max_displacement=(1.5, 4.5, 4.5),
+                                                          locked_borders=2,
+                                                          image_interpolation='linear',
+                                                          label_interpolation='nearest')
+        none = tio.transforms.RandomAffine(scales=(0, 0), degrees=(0, 0), translation=0, center='image',
+                                           include='img')
+
+        # create combinations of transformations
+        trans1 = tio.transforms.Compose([lateral, affine])
+        trans2 = tio.transforms.Compose([lateral, scaling])
+        trans3 = tio.transforms.Compose([affine, scaling])
+        trans4 = tio.transforms.Compose([lateral, affine, scaling])
+        trans5 = tio.transforms.Compose([lateral, elastic])
+        trans6 = tio.transforms.Compose([affine, elastic])
+        trans7 = tio.transforms.Compose([scaling, elastic])
+        trans8 = tio.transforms.Compose([lateral, affine, elastic])
+        trans9 = tio.transforms.Compose([lateral, scaling, elastic])
+        trans10 = tio.transforms.Compose([affine, scaling, elastic])
+        trans11 = tio.transforms.Compose([lateral, affine, scaling, elastic])
+
+        # create a dict of transformations with probabilities
+        transforms_dict = {
+            trans1: 1,
+            trans2: 1,
+            trans3: 1,
+            trans4: 1,
+            trans5: 1,
+            trans6: 1,
+            trans7: 1,
+            trans8: 1,
+            trans9: 1,
+            trans10: 1,
+            trans11: 1,
+            lateral: 1,
+            affine: 1,
+            scaling: 1,
+            elastic: 1,
+            none: 15  # don't transform all data
+        }
+        all_transforms = tio.OneOf(transforms_dict)
+
+        new_dataset = tio.SubjectsDataset(self.subjects, transform=all_transforms)
+        return new_dataset
