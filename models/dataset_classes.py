@@ -133,7 +133,7 @@ class Experiment4(ABC):
             # create torchio subject instance and pad image and mask for later augmentation
             self.subjects.append(tio.Subject(img=cop(tio.ScalarImage(file)), label=cop(tio.LabelMap(label_path))))
 
-    def create_dataset(self):
+    def create_dataset(self, augmentation=True):
         """
         Applies data augmentation to the images and labels. The dataset instance from torchio is used to get the
         inverse transformation.
@@ -185,5 +185,8 @@ class Experiment4(ABC):
         }
         all_transforms = tio.OneOf(transforms_dict)
 
-        new_dataset = tio.SubjectsDataset(self.subjects, transform=all_transforms)
+        if augmentation:
+            new_dataset = tio.SubjectsDataset(self.subjects, transform=all_transforms)
+        else:
+            new_dataset = tio.SubjectsDataset(self.subjects)
         return new_dataset
