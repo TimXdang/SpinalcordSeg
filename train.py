@@ -4,14 +4,15 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 
-from models.models import UNet2DRemake
+from models.models import UNet2DRemake, UNet3D
 import segmentation_models_pytorch.utils as smpu
 from models.dataset_classes import *
 from utils import *
 
 # configurations which can be replaced by config file later on
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-model = UNet2DRemake().model
+# model = UNet2DRemake().model
+model = UNet3D(in_channels=1, out_channels=1)
 loss = smpu.losses.DiceLoss()
 metrics = [smpu.metrics.IoU(threshold=0.5), ]
 
@@ -29,8 +30,11 @@ optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.002), ])
 # valid_epoch = smpu.train.ValidEpoch(model=model, loss=loss, metrics=metrics, device=device, verbose=True)
 
 train_epoch = TrainEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer, device=device, verbose=True,
-                         unet2d=True)
-valid_epoch = ValidEpoch(model=model, loss=loss, metrics=metrics, device=device, verbose=True, unet2d=True)
+                         #unet2d=True
+                         )
+valid_epoch = ValidEpoch(model=model, loss=loss, metrics=metrics, device=device, verbose=True,
+                         #unet2d=True
+                         )
 
 # set up k-fold cross validation
 k = 5
@@ -39,7 +43,7 @@ foldperf = {}
 
 # dataset, _ = divide_data()
 new_set = Experiment4('dataset/Experiment4/sub-02', (0, 2, 3, 225))
-dataset = new_set.create_dataset(augmentation=False)
+dataset = new_set.create_dataset(augmentation=True)
 
 # start training
 for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset)))):

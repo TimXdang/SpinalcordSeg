@@ -119,7 +119,7 @@ class Experiment4(ABC):
         """
         single_imgs = Path(op.join(sys.path[0], subject_path + '/single_images'))
         regex = re.compile(r'\d+')
-        cop = tio.CropOrPad((160, 64, 35))
+        cop = tio.CropOrPad((160, 64, 40))
 
         self.subjects = []
         # assign masks to images

@@ -47,7 +47,7 @@ class Conv3DBlock(nn.Module):
         x = self.relu(self.bn1(self.conv1(x)))
         x = self.relu(self.bn2(self.conv2(x)))
         if not self.bottleneck:
-            out = self.pooling(x)
+            out = self.pool(x)
         else:
             out = x
         return out, x
