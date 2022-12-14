@@ -11,6 +11,11 @@ import re
 class SpinalCordDataset(Dataset, ABC):
     """
     Create own dataset for usage in PyTorch. Enables application of image transformations.
+
+    :ivar targets: labels / ground truth masks
+    :ivar img_files: fMRI spinal cord images
+    :ivar transform: transformations to be applied on the fMRI images
+    :ivar target_transform: transformations to be applied on the targets
     """
     def __init__(self, annotations_files, img_files, transform=None, target_transform=None):
         self.targets = annotations_files
@@ -112,6 +117,8 @@ class Experiment4(ABC):
     """
     Creates a dataset consisting of the fMRI images of one subject gained by splitting the fMRI sequence. Images for
     which the mean mask cannot be applied have to be provided with a new mask.
+
+    :ivar subjects: list of torchio Subject instances
     """
     def __init__(self, subject_path, new_labels):
         """

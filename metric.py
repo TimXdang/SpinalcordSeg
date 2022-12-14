@@ -5,13 +5,18 @@ from torch import nn
 
 
 class JaccardIndex(nn.Module):
+    """
+    Jaccard Index / Intersection over Union.
+
+    :ivar eps: epsilon to avoid division by zero
+    """
     __name__ = "iou_score"
 
-    def __init__(self, eps=1e-7):
+    def __init__(self, eps: float = 1e-7):
         super().__init__()
         self.eps = eps
 
-    def _binarize_predictions(self, y, n_classes):
+    def _binarize_predictions(self, y: torch.Tensor, n_classes: int):
         """
         Puts 1 for the class/channel with the highest probability and 0 in other channels. Returns byte tensor of the
         same size as the input tensor.
@@ -27,7 +32,7 @@ class JaccardIndex(nn.Module):
         _, max_index = torch.max(y, dim=0, keepdim=True)
         return torch.zeros_like(y, dtype=torch.uint8).scatter_(0, max_index, 1)
 
-    def _jaccard_index(self, pred, y):
+    def _jaccard_index(self, pred: torch.Tensor, y: torch.Tensor):
         """
         Computes IoU for a given target and prediction tensors.
 
@@ -36,7 +41,14 @@ class JaccardIndex(nn.Module):
         """
         return torch.sum(pred & y).float() / torch.clamp(torch.sum(pred | y).float(), min=1e-8)
 
-    def forward(self, pred, y):
+    def forward(self, pred: torch.Tensor, y: torch.Tensor):
+        """
+        Forward pass.
+
+        :param pred: predictions
+        :param y: targets
+        :return: IoU metric
+        """
         n_classes = pred.size()[1]
         assert pred.size() == y.size()
 

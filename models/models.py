@@ -9,6 +9,10 @@ from typing import Union, List
 class UNet2DRemake:
     """
     2D U-net from https://github.com/qubvel/segmentation_models.pytorch
+
+    :ivar encoder: encoder backbone structure
+    :ivar encoder_weights: pre-trained weights
+    :ivar activation: final layer activation
     """
     def __init__(self):
         self.encoder = 'resnext101_32x8d'
@@ -25,12 +29,24 @@ class UNet2DRemake:
 class Conv3DBlock(nn.Module):
     """
     Encoder block element for 3D U-net. Subclass of torch.nn and returns output and residual link information. It
-    applies convolutions, batch normalization, max pooling and uses the ReLU function as activation
-    :param in_channels: number of input channels
-    :param out_channels: number of output channels
-    :param bottleneck: True if used in bottleneck
+    applies convolutions, batch normalization, max pooling and uses the ReLU function as activation.
+
+    :ivar conv1: First 3D convolution
+    :ivar conv2: Second 3D convolution
+    :ivar bn1: First 3D batch normalization
+    :ivar bn2: Second 3D batch normalization
+    :ivar relu: ReLU activation
+    :ivar bottleneck: Indicator if bottleneck
+    :ivar pool: 3D max pooling
     """
     def __init__(self, in_channels: int, out_channels: int, bottleneck: bool = False):
+        """
+        Constructor
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        :param bottleneck: True if used in bottleneck
+        """
         super(Conv3DBlock, self).__init__()
         self.conv1 = nn.Conv3d(in_channels=in_channels, out_channels=out_channels // 2, kernel_size=(3, 3, 3),
                                padding=1)
@@ -44,6 +60,12 @@ class Conv3DBlock(nn.Module):
             self.pool = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=2)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: input
+        :return: output and residual link
+        """
         x = self.relu(self.bn1(self.conv1(x)))
         x = self.relu(self.bn2(self.conv2(x)))
         if not self.bottleneck:
@@ -56,13 +78,25 @@ class Conv3DBlock(nn.Module):
 class UpConv3DBlock(nn.Module):
     """
     Decoder block element for 3D U-net. Subclass of torch.nn and applies upconvolutions, convolutions, batch
-    normalization and uses ReLU as an activation
-    :param in_channels: number of input channels
-    :param skip_channels: number of channels coming from skip connection
-    :param out_channels: number of output channels
-    :param last: indicates if this is a block for the last layer, meaning the layer with the highest image resolution
+    normalization and uses ReLU as an activation.
+
+    :ivar upconv1: Up-convolution
+    :ivar conv1: First 3D convolution
+    :ivar conv2: Second 3D convolution
+    :ivar conv3: Third 3D convolution
+    :ivar relu: ReLU activation
+    :ivar bn: Batch normalization
+    :ivar last: Indicates whether last layer (layer with highest image resolution)
     """
     def __init__(self, in_channels: int, skip_channels: int, out_channels: Union[int, None] = None, last: bool = False):
+        """
+        Constructor
+
+        :param in_channels: number of input channels
+        :param skip_channels: number of channels coming from skip connection
+        :param out_channels: number of output channels
+        :param last: indicates if this is a block for the last layer, meaning the layer with the highest image resolution
+        """
         super(UpConv3DBlock, self).__init__()
         assert (last is False and out_channels is None) or (last is True and out_channels is not None), \
             'Invalid arguments!'
@@ -79,6 +113,13 @@ class UpConv3DBlock(nn.Module):
             self.conv3 = nn.Conv3d(in_channels=in_channels // 2, out_channels=out_channels, kernel_size=(1, 1, 1))
 
     def forward(self, x, skip=None):
+        """
+        Forward pass.
+
+        :param x: input
+        :param skip: residual connection
+        :return: output
+        """
         x = self.upconv1(x)
         if skip is not None:
             x = torch.cat((x, skip), 1)
@@ -92,13 +133,25 @@ class UpConv3DBlock(nn.Module):
 class UNet3D(nn.Module):
     """
     3D U-net according to https://arxiv.org/abs/1606.06650
-    :param in_channels: number of input channels
-    :param out_channels: number of output channels
-    :param lvl_channels: number of channels in the 3 defined U-net levels in form of a list
-    :param bottleneck_channel: number of channels in the bottleneck
+
+    :ivar encoder1: High level encoder of U-net
+    :ivar encoder2: Middle level encoder of U-net
+    :ivar encoder3: Bottom level encoder of U-net
+    :ivar bottleneck: Bottleneck convolutions of U-net
+    :ivar decoder1: High level decoder of U-net
+    :ivar decoder2: Middle level decoder of U-net
+    :ivar decoder3: Bottom level decoder of U-net
     """
     def __init__(self, in_channels: int, out_channels: int, lvl_channels: List[int] = [64, 128, 256],
                  bottleneck_channel: int = 512):
+        """
+        Constructor
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        :param lvl_channels: number of channels in the 3 defined U-net levels in form of a list
+        :param bottleneck_channel: number of channels in the bottleneck
+        """
         super(UNet3D, self).__init__()
         lvl1_channels, lvl2_channels, lvl3_channels = lvl_channels
         self.encoder1 = Conv3DBlock(in_channels=in_channels, out_channels=lvl1_channels)
@@ -111,6 +164,12 @@ class UNet3D(nn.Module):
                                       last=True)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: input
+        :return: output
+        """
         # Encoder
         x, res_lvl1 = self.encoder1(x)
         x, res_lvl2 = self.encoder2(x)

@@ -7,6 +7,9 @@ def flatten(tensor: torch.Tensor) -> torch.Tensor:
     """
     Flattens tensor such that channel axis is first.
     Shapes are transformed as follows: (N, C, D, H, W) -> (C, N * D * H * W)
+
+    :param tensor: tensor to be flattened
+    :return: flattened tensor
     """
     # number of channels
     C = tensor.size(1)
@@ -28,7 +31,7 @@ class VolDiceLoss(nn.Module):
     """
     __name__ = 'dice_loss'
 
-    def __init__(self, normalization='sigmoid'):
+    def __init__(self, normalization: str = 'sigmoid'):
         super(VolDiceLoss, self).__init__()
         assert normalization in ['sigmoid', 'softmax', 'none']
         if normalization == 'sigmoid':
@@ -38,7 +41,7 @@ class VolDiceLoss(nn.Module):
         else:
             self.normalization = lambda x: x
 
-    def dice(self, y, pred, epsilon=1e-6):
+    def dice(self, y: torch.Tensor, pred: torch.Tensor, epsilon: float = 1e-6) -> float:
         """
         Computes DiceCoefficient as defined in https://arxiv.org/abs/1606.04797 .
         Assumes the input is a normalized probability, e.g. a result of Sigmoid or Softmax function.
@@ -46,6 +49,7 @@ class VolDiceLoss(nn.Module):
         :param y: NxCxSpatial input tensor
         :param pred: NxCxSpatial target tensor
         :param epsilon: float that prevents division by zero
+        :return: dice coefficient
         """
 
         # input and target shapes must match
@@ -59,7 +63,14 @@ class VolDiceLoss(nn.Module):
         denominator = (y * y).sum(-1) + (pred * pred).sum(-1)
         return 2 * (intersect / denominator.clamp(min=epsilon))
 
-    def forward(self, pred, y):
+    def forward(self, pred: torch.Tensor, y: torch.Tensor) -> float:
+        """
+        Forward pass.
+
+        :param pred: predictions
+        :param y: targets
+        :return: dice loss
+        """
         # get probabilities from logits
         pred = self.normalization(pred)
 
@@ -81,12 +92,12 @@ class CrossEntropyDice(nn.Module):
     """
     __name__ = 'ce_dice_loss'
 
-    def __init__(self, alpha, beta):
+    def __init__(self, alpha: float, beta: float):
         super(CrossEntropyDice, self).__init__()
         self.alpha = alpha
         self.bce = nn.BCEWithLogitsLoss()
         self.beta = beta
         self.dice = VolDiceLoss()
 
-    def forward(self, pred, y):
+    def forward(self, pred: torch.Tensor, y: torch.Tensor) -> float:
         return self.alpha * self.bce(pred, y) + self.beta * self.dice(pred, y)
