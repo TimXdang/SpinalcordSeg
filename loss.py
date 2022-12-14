@@ -68,3 +68,25 @@ class VolDiceLoss(nn.Module):
 
         # average Dice score
         return 1. - torch.mean(dice)
+
+
+class CrossEntropyDice(nn.Module):
+    """
+    Linear combination of Binary Cross Entropy and Dice Loss as proposed in https://arxiv.org/pdf/1809.10486.pdf
+
+    :ivar alpha: factor for BCE loss
+    :ivar beta: factor for DICE loss
+    :ivar bce: BCE loss
+    :ivar dice: DICE loss
+    """
+    __name__ = 'ce_dice_loss'
+
+    def __init__(self, alpha, beta):
+        super(CrossEntropyDice, self).__init__()
+        self.alpha = alpha
+        self.bce = nn.BCEWithLogitsLoss()
+        self.beta = beta
+        self.dice = VolDiceLoss()
+
+    def forward(self, pred, y):
+        return self.alpha * self.bce(pred, y) + self.beta * self.dice(pred, y)
