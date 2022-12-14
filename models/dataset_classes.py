@@ -35,6 +35,7 @@ class SpinalCordDataset(Dataset, ABC):
 def divide_data(image_dimensions=(160, 64, 35)):
     """
     Splits the data into subset for training and validation and a subset for testing the model.
+
     :param image_dimensions: Desired dimension of images. Images are cropped/padded accordingly
     :return: Tuple of (train_val_set, test_set)
     """
@@ -137,6 +138,7 @@ class Experiment4(ABC):
         """
         Applies data augmentation to the images and labels. The dataset instance from torchio is used to get the
         inverse transformation.
+
         :return: dataset
         """
         lateral = tio.transforms.RandomAffine(scales=(1, 1), degrees=(-3, 3), translation=0, center='image')
@@ -144,7 +146,7 @@ class Experiment4(ABC):
                                              translation=(1.5, 2.5, 0), center='image')
         scaling = tio.transforms.RandomAffine(scales=(1, 1.5), degrees=(0, 0), center='image', isotropic=True)
         elastic = tio.transforms.RandomElasticDeformation(num_control_points=(5, 10, 10),
-                                                          max_displacement=(1.5, 4.5, 4.5),
+                                                          max_displacement=(1.5, 4, 4.5),
                                                           locked_borders=2,
                                                           image_interpolation='linear',
                                                           label_interpolation='nearest')

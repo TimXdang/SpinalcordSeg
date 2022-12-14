@@ -4,6 +4,7 @@ from tqdm import tqdm as tqdm
 from segmentation_models_pytorch.utils.meter import AverageValueMeter
 
 
+# adaptions made to the classes from segmentation models
 class Epoch:
     def __init__(self, model, loss, metrics, stage_name, device="cpu", verbose=True, unet2d=False):
         self.model = model

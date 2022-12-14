@@ -36,6 +36,7 @@ def main(input_dir: Path, output_dir: Path, sequence: bool, model_str: ModelChoi
         f.write(''.join(f'{img}\t{idx}\n' for idx, img in enumerate(image_paths)))
 
     # TODO: possible to predict for every timepoint in the case of sequence
+    # TODO: create directory for output if not existent
     # make predictions
     for idx, img_path in enumerate(image_paths):
         img = tio.ScalarImage(img_path)
