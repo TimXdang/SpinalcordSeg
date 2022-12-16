@@ -97,7 +97,7 @@ class CrossEntropyDice(nn.Module):
         self.alpha = alpha
         self.bce = nn.BCEWithLogitsLoss()
         self.beta = beta
-        self.dice = VolDiceLoss()
+        self.dice = VolDiceLoss('sigmoid')
 
     def forward(self, pred: torch.Tensor, y: torch.Tensor) -> float:
-        return self.alpha * self.bce(pred, y) + self.beta * self.dice(pred, y)
+        return self.alpha * self.bce(pred, y.float()) + self.beta * self.dice(pred, y)

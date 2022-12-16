@@ -8,21 +8,25 @@ from models.models import UNet2DRemake, UNet3D
 import segmentation_models_pytorch.utils as smpu
 from models.dataset_classes import *
 from utils import *
+from loss import *
+from metric import *
 
 # configurations which can be replaced by config file later on
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # model = UNet2DRemake().model
 model = UNet3D(in_channels=1, out_channels=1)
-loss = smpu.losses.DiceLoss()
-metrics = [smpu.metrics.IoU(threshold=0.5), ]
+# loss = smpu.losses.DiceLoss()
+loss = VolDiceLoss('sigmoid')
+# metrics = [smpu.metrics.IoU(threshold=0.5), ]
+metrics = [JaccardIndex(), ]
 
 num_epochs = 30
-batch_size = 16
+batch_size = 12
 # define after how many epochs the learning rate shall be changed
-epochs_to_decay = 50
-reduced_lr = 1e-5
+# epochs_to_decay = 50
+# reduced_lr = 1e-5
 
-optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.002), ])
+optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.004), ])
 
 # set up training and validation
 # train_epoch = smpu.train.TrainEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer,
@@ -43,7 +47,10 @@ foldperf = {}
 
 # dataset, _ = divide_data()
 new_set = Experiment4('dataset/Experiment4/sub-02', (0, 2, 3, 225))
-dataset = new_set.create_dataset(augmentation=True)
+dataset, test_set = new_set.create_dataset(augmentation=True)
+loss_name = loss.__name__
+metric_name = metrics[0].__name__
+# TODO for multiple metrics
 
 # start training
 for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset)))):
@@ -63,10 +70,10 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
         train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
 
-        train_loss = train_logs['dice_loss']
-        train_acc = train_logs['iou_score']
-        val_loss = valid_logs['dice_loss']
-        val_acc = valid_logs['iou_score']
+        train_loss = train_logs[loss_name]
+        train_acc = train_logs[metric_name]
+        val_loss = valid_logs[loss_name]
+        val_acc = valid_logs[metric_name]
 
         history['train_loss'].append(train_loss)
         history['val_loss'].append(val_loss)

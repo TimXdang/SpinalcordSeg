@@ -18,17 +18,17 @@ device = torch.device(#'cpu'
 # model = UNet2DRemake().model
 model = UNet3D(in_channels=1, out_channels=1)
 loss = smpu.losses.DiceLoss()
-loss = VolDiceLoss()
+loss = VolDiceLoss('sigmoid')
 metrics = [smpu.metrics.IoU(threshold=0.5), ]
 metrics = [JaccardIndex(), ]
 
 num_epochs = 5
-batch_size = 8
+batch_size = 12
 # define after how many epochs the learning rate shall be changed
 epochs_to_decay = 50
 reduced_lr = 1e-5
 
-optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.002), ])
+optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.2), ])
 
 # set up training and validation
 # train_epoch = smpu.train.TrainEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer,
@@ -49,7 +49,7 @@ foldperf = {}
 
 # dataset, _ = divide_data()
 new_set = Experiment4('dataset/Experiment4/sub-02', (0, 2, 3, 225))
-dataset = new_set.create_dataset(augmentation=True)
+dataset, test_set = new_set.create_dataset(augmentation=True)
 
 # start training
 for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset)))):
@@ -61,22 +61,21 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
     val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
 
     if fold == 1:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.001), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.3), ])
         train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
     if fold == 2:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.003), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.1), ])
         train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
     if fold == 3:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.002), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.2), ])
         train_loader = DataLoader(dataset, batch_size=4, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=4, sampler=val_sampler)
     if fold == 4:
-        loss = CrossEntropyDice(alpha=0.5, beta=0.5)
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.002), ])
-        train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
-        val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.2), ])
+        train_loader = DataLoader(dataset, batch_size=8, sampler=train_sampler)
+        val_loader = DataLoader(dataset, batch_size=8, sampler=val_sampler)
 
     model = UNet3D(in_channels=1, out_channels=1)
 
@@ -88,6 +87,7 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
                              )
 
     history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
+    loss_name = loss.__name__
 
     for epoch in range(num_epochs):
 
@@ -96,9 +96,9 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
         train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
 
-        train_loss = train_logs['dice_loss']
+        train_loss = train_logs[loss_name]
         train_acc = train_logs['iou_score']
-        val_loss = valid_logs['dice_loss']
+        val_loss = valid_logs[loss_name]
         val_acc = valid_logs['iou_score']
 
         history['train_loss'].append(train_loss)
@@ -127,3 +127,7 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
     plt.savefig(f'output/acc_curves_{fold}')
 
     plt.clf()
+
+print('Test Performance: ')
+test_loader = DataLoader(test_set, batch_size=8)
+logs = valid_epoch.run(test_loader)

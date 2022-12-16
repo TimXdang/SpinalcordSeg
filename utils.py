@@ -92,15 +92,14 @@ class TrainEpoch(Epoch):
         self.model.train()
 
     def batch_update(self, x, y):
-        if self.unet2d:
+        self.optimizer.zero_grad()
+        if self.unet2d is True:
             batch_size = x.shape[0]
             o_shape = x.shape
             x = x.reshape(batch_size, 1, 160, -1)
 
-            self.optimizer.zero_grad()
             prediction = self.model.forward(x).reshape(o_shape)
         else:
-            self.optimizer.zero_grad()
             prediction = self.model.forward(x)
         loss = self.loss(prediction, y)
         loss.backward()
@@ -124,16 +123,14 @@ class ValidEpoch(Epoch):
         self.model.eval()
 
     def batch_update(self, x, y):
-        if self.unet2d:
-            batch_size = x.shape[0]
-            o_shape = x.shape
-            x = x.reshape(batch_size, 1, 160, -1)
+        with torch.no_grad():
+            if self.unet2d is True:
+                batch_size = x.shape[0]
+                o_shape = x.shape
+                x = x.reshape(batch_size, 1, 160, -1)
 
-            with torch.no_grad():
                 prediction = self.model.forward(x).reshape(o_shape)
-                loss = self.loss(prediction, y)
-        else:
-            with torch.no_grad():
+            else:
                 prediction = self.model.forward(x)
-                loss = self.loss(prediction, y)
+            loss = self.loss(prediction, y)
         return loss, prediction
