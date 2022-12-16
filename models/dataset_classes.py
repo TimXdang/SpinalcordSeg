@@ -1,5 +1,5 @@
 from abc import ABC
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 import numpy as np
 import torchio as tio
 import os.path as op
@@ -198,4 +198,14 @@ class Experiment4(ABC):
             new_dataset = tio.SubjectsDataset(self.subjects, transform=all_transforms)
         else:
             new_dataset = tio.SubjectsDataset(self.subjects)
-        return new_dataset
+
+        set_split = 0.2
+        dataset_size = len(new_dataset)
+        indices = list(range(dataset_size))
+        split = int(np.floor(set_split * dataset_size))
+        train_indices, test_indices = indices[split:], indices[:split]
+
+        train_set = Subset(new_dataset, train_indices)
+        test_set = Subset(new_dataset, test_indices)
+
+        return train_set, test_set
