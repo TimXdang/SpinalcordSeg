@@ -182,3 +182,26 @@ class UNet3D(nn.Module):
         x = self.decoder1(x, res_lvl1)
 
         return x
+
+
+class Reduced3DUnet(nn.Module):
+    def __init__(self, in_channels, out_channels, lvl_channels=[64, 128], bottleneck_channel=256) -> None:
+        super(Reduced3DUnet, self).__init__()
+        lvl_1_chnls, lvl_2_chnls = lvl_channels[0], lvl_channels[1]
+        self.a_block1 = Conv3DBlock(in_channels=in_channels, out_channels=lvl_1_chnls)
+        self.a_block2 = Conv3DBlock(in_channels=lvl_1_chnls, out_channels=lvl_2_chnls)
+        self.bottleNeck = Conv3DBlock(in_channels=lvl_2_chnls, out_channels=bottleneck_channel, bottleneck=True)
+        self.s_block2 = UpConv3DBlock(in_channels=bottleneck_channel, skip_channels=lvl_2_chnls)
+        self.s_block1 = UpConv3DBlock(in_channels=lvl_2_chnls, skip_channels=lvl_1_chnls, out_channels=out_channels,
+                                      last=True)
+
+    def forward(self, x):
+        # Left path
+        out, residual_lvl1 = self.a_block1(x)
+        out, residual_lvl2 = self.a_block2(out)
+        out, _ = self.bottleNeck(out)
+
+        # Right path
+        out = self.s_block2(out, residual_lvl2)
+        out = self.s_block1(out, residual_lvl1)
+        return out
