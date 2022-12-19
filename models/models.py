@@ -108,6 +108,7 @@ class UpConv3DBlock(nn.Module):
                                padding=(1, 1, 1))
         self.relu = nn.ReLU()
         self.bn = nn.BatchNorm3d(num_features=in_channels // 2)
+        self.activation = nn.Sigmoid()
         self.last = last
         if last:
             self.conv3 = nn.Conv3d(in_channels=in_channels // 2, out_channels=out_channels, kernel_size=(1, 1, 1))
@@ -126,7 +127,7 @@ class UpConv3DBlock(nn.Module):
         x = self.relu(self.bn(self.conv1(x)))
         x = self.relu(self.bn(self.conv2(x)))
         if self.last:
-            x = self.conv3(x)
+            x = self.activation(self.conv3(x))
         return x
 
 
@@ -194,6 +195,7 @@ class Reduced3DUnet(nn.Module):
         self.s_block2 = UpConv3DBlock(in_channels=bottleneck_channel, skip_channels=lvl_2_chnls)
         self.s_block1 = UpConv3DBlock(in_channels=lvl_2_chnls, skip_channels=lvl_1_chnls, out_channels=out_channels,
                                       last=True)
+        self.activation = nn.Sigmoid()
 
     def forward(self, x):
         # Left path
@@ -204,4 +206,181 @@ class Reduced3DUnet(nn.Module):
         # Right path
         out = self.s_block2(out, residual_lvl2)
         out = self.s_block1(out, residual_lvl1)
+        return out
+
+
+class InputLayerVNet(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super(InputLayerVNet, self).__init__()
+        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels // 2, kernel_size=(5, 5, 5),
+                              padding=2)
+        self.relu = nn.PReLU()
+        self.bn1 = nn.GroupNorm(num_groups=4, num_channels=out_channels // 2)
+        self.bn2 = nn.GroupNorm(num_groups=4, num_channels=out_channels)
+        self.down_conv = nn.Conv3d(in_channels=out_channels // 2, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                   stride=2)
+
+    def forward(self, x):
+        out = self.relu(self.bn1(self.conv(x)))
+        res = torch.add(out, x)
+        out = self.relu(self.bn2(self.down_conv(res)))
+        return res, out
+
+
+class EncodeBlockVNet1(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super(EncodeBlockVNet1, self).__init__()
+        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.relu = nn.PReLU()
+        self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
+        self.bn2 = nn.GroupNorm(num_groups=4, num_channels=out_channels)
+        self.down_conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                   stride=2)
+        self.do = nn.Dropout(0.3)
+
+    def forward(self, x):
+        out = self.relu(self.bn(self.conv(x)))
+        out = self.do(out)
+        out = self.relu(self.bn(self.conv(out)))
+        out = self.do(out)
+        res = torch.add(out, x)
+        out = self.relu(self.bn2(self.down_conv(res)))
+        return res, out
+
+
+class EncodeBlockVNet2(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, bottleneck=False):
+        super(EncodeBlockVNet2, self).__init__()
+        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.relu = nn.PReLU()
+        self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
+        self.bn2 = nn.GroupNorm(num_groups=4, num_channels=out_channels)
+        self.down_conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                   stride=2)
+        self.up_conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                          stride=2)
+        self.bottleneck = bottleneck
+        self.do = nn.Dropout(0.3)
+
+    def forward(self, x):
+        out = self.relu(self.bn(self.conv(x)))
+        out = self.do(out)
+        out = self.relu(self.bn(self.conv(out)))
+        out = self.do(out)
+        out = self.relu(self.bn(self.conv(out)))
+        out = self.do(out)
+        res = torch.add(out, x)
+        if not self.bottleneck:
+            out = self.relu(self.bn2(self.down_conv(res)))
+            return res, out
+        else:
+            return self.relu(self.bn(self.up_conv(res)))
+
+
+class DecodeBlockVnet2(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(DecodeBlockVnet2, self).__init__()
+        self.conv2 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.relu = nn.PReLU()
+        self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
+        self.up_conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                          stride=2)
+
+    def forward(self, x, skip):
+        out = torch.cat((x, skip), dim=1)
+        out = self.relu(self.bn(self.conv2(out)))
+        out = self.relu(self.bn(self.conv(out)))
+        out = self.relu(self.bn(self.conv(out)))
+        out = torch.add(out, x)
+        out = self.up_conv(out)
+        return out
+
+
+class DecodeBlockVnet1(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(DecodeBlockVnet1, self).__init__()
+        self.conv2 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.relu = nn.PReLU()
+        self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
+        self.up_conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                          stride=2)
+
+    def forward(self, x, skip):
+        out = torch.cat((x, skip), dim=1)
+        out = self.relu(self.bn(self.conv2(out)))
+        out = self.relu(self.bn(self.conv(out)))
+        out = torch.add(out, x)
+        out = self.up_conv(out)
+        return out
+
+
+class OutputLayerVnet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(OutputLayerVnet, self).__init__()
+        self.conv1 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.relu = nn.PReLU()
+        self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
+        self.conv2 = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=1)
+        self.activation = nn.Softmax(1)
+
+    def forward(self, x, skip):
+        out = torch.cat((x, skip), dim=1)
+        out = self.relu(self.bn(self.conv1(out)))
+        out = torch.add(out, x)
+        out = self.conv2(out)
+        out = out.permute(0, 2, 3, 4, 1).contiguous()
+        out = out.view(out.numel() // 2, 2)
+        out = self.activation(out)
+        return out[:, 0]
+
+
+class VNet(nn.Module):
+    def __init__(self):
+        super(VNet, self).__init__()
+        self.encoder1 = InputLayerVNet(in_channels=1, out_channels=32)
+        self.encoder2 = EncodeBlockVNet1(in_channels=32, out_channels=64)
+        self.encoder3 = EncodeBlockVNet2(in_channels=64, out_channels=128)
+        self.encoder4 = EncodeBlockVNet2(in_channels=128, out_channels=256)
+        self.bottleneck = EncodeBlockVNet2(in_channels=256, out_channels=256, bottleneck=True)
+        self.decoder4 = DecodeBlockVnet2(in_channels=256, out_channels=128)
+        self.decoder3 = DecodeBlockVnet2(in_channels=128, out_channels=64)
+        self.decoder2 = DecodeBlockVnet1(in_channels=64, out_channels=32)
+        self.decoder1 = OutputLayerVnet(in_channels=32, out_channels=2)
+
+    def forward(self, x):
+        skip1, out = self.encoder1(x)
+        skip2, out = self.encoder2(out)
+        skip3, out = self.encoder3(out)
+        skip4, out = self.encoder4(out)
+        out = self.bottleneck(out)
+        out = self.decoder4(out, skip4)
+        out = self.decoder3(out, skip3)
+        out = self.decoder2(out, skip2)
+        out = self.decoder1(out, skip1)
+        out = out.reshape(x.shape)
+        return out
+
+
+class ReducedVNet(nn.Module):
+    def __init__(self):
+        super(ReducedVNet, self).__init__()
+        self.encoder1 = InputLayerVNet(in_channels=1, out_channels=32)
+        self.encoder2 = EncodeBlockVNet1(in_channels=32, out_channels=64)
+        self.encoder3 = EncodeBlockVNet2(in_channels=64, out_channels=128)
+        self.bottleneck = EncodeBlockVNet2(in_channels=128, out_channels=128, bottleneck=True)
+        self.decoder3 = DecodeBlockVnet2(in_channels=128, out_channels=64)
+        self.decoder2 = DecodeBlockVnet1(in_channels=64, out_channels=32)
+        self.decoder1 = OutputLayerVnet(in_channels=32, out_channels=2)
+
+    def forward(self, x):
+        skip1, out = self.encoder1(x)
+        skip2, out = self.encoder2(out)
+        skip3, out = self.encoder3(out)
+        out = self.bottleneck(out)
+        out = self.decoder3(out, skip3)
+        out = self.decoder2(out, skip2)
+        out = self.decoder1(out, skip1)
+        out = out.reshape(x.shape)
         return out
