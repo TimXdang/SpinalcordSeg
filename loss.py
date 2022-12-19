@@ -97,7 +97,42 @@ class CrossEntropyDice(nn.Module):
         self.alpha = alpha
         self.bce = nn.BCEWithLogitsLoss()
         self.beta = beta
-        self.dice = VolDiceLoss('sigmoid')
+        self.dice = VolDiceLoss()
 
     def forward(self, pred: torch.Tensor, y: torch.Tensor) -> float:
         return self.alpha * self.bce(pred, y.float()) + self.beta * self.dice(pred, y)
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.8, gamma=2):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.bce = nn.BCELoss()
+
+    def forward(self, pred, y):
+        # flatten label and prediction tensors
+        pred = pred.view(-1)
+        y = y.view(-1)
+
+        bce = self.bce(pred, y.float())
+        bce_exp = torch.exp(-bce)
+        focal_loss = self.alpha * (1-bce_exp)**self.gamma * bce
+
+        return focal_loss
+
+
+class FocalDiceLoss(nn.Module):
+    """
+    https://www.sciencedirect.com/science/article/pii/S1361841521003042
+    """
+    __name__ = 'focal_dice'
+    def __init__(self, beta=3):
+        super().__init__()
+        self.beta = beta
+        self.dice = VolDiceLoss()
+
+    def forward(self, pred, target):
+        focal_dice = 0.05 * self.dice(pred, target) ** (1 / self.beta) + 0.95 * (1 - self.dice(pred, target)) ** \
+                        (1 / self.beta)
+        return focal_dice
