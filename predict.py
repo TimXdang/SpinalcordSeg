@@ -6,8 +6,7 @@ import torchio as tio
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-shape = (160, 64, 35)
-transform = tio.CropOrPad(shape)
+
 # certain volume of fmri sequence
 timepoint = 0
 
@@ -16,6 +15,8 @@ timepoint = 0
 class ModelChoices(str, Enum):
     UNET2D = 'UNET2D'
     UNET3D = 'UNET3D'
+    Red3D = 'REDUNET3D'
+    VNET = 'VNET'
 
 
 def main(input_dir: Path, output_dir: Path, sequence: bool, model_str: ModelChoices = typer.Argument('UNET2D')):
@@ -28,8 +29,20 @@ def main(input_dir: Path, output_dir: Path, sequence: bool, model_str: ModelChoi
     # select model
     if model_str == ModelChoices.UNET2D:
         model = torch.load('output/k_cross.pth')
+        shape = (160, 64, 35)
+        transform = tio.CropOrPad(shape)
     elif model_str == ModelChoices.UNET3D:
-        pass
+        model = torch.load('output/unet3d.pth')
+        shape = (160, 64, 48)
+        transform = tio.CropOrPad(shape)
+    elif model_str == ModelChoices.Red3D:
+        model = torch.load('output/red3d.pth')
+        shape = (160, 64, 48)
+        transform = tio.CropOrPad(shape)
+    elif model_str == ModelChoices.VNET:
+        model = torch.load('output/vnet3d.pth')
+        shape = (144, 48, 32)
+        transform = tio.CropOrPad(shape)
 
     # save list with corresponding files and predicted masks
     with open('output/predictions/assignments.txt','w') as f:
