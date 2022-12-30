@@ -8,7 +8,7 @@ from typing import Union, List
 
 class UNet2DRemake:
     """
-    2D U-net from https://github.com/qubvel/segmentation_models.pytorch
+    2D U-net from https://github.com/qubvel/segmentation_models.pytorch .
 
     :ivar encoder: encoder backbone structure
     :ivar encoder_weights: pre-trained weights
@@ -41,7 +41,7 @@ class Conv3DBlock(nn.Module):
     """
     def __init__(self, in_channels: int, out_channels: int, bottleneck: bool = False):
         """
-        Constructor
+        Constructor.
 
         :param in_channels: number of input channels
         :param out_channels: number of output channels
@@ -90,12 +90,12 @@ class UpConv3DBlock(nn.Module):
     """
     def __init__(self, in_channels: int, skip_channels: int, out_channels: Union[int, None] = None, last: bool = False):
         """
-        Constructor
+        Constructor.
 
         :param in_channels: number of input channels
         :param skip_channels: number of channels coming from skip connection
         :param out_channels: number of output channels
-        :param last: indicates if this is a block for the last layer, meaning the layer with the highest image resolution
+        :param last: indicates if this is a block for the last layer, i.e. the layer with the highest image resolution
         """
         super(UpConv3DBlock, self).__init__()
         assert (last is False and out_channels is None) or (last is True and out_channels is not None), \
@@ -146,7 +146,7 @@ class UNet3D(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, lvl_channels: List[int] = [64, 128, 256],
                  bottleneck_channel: int = 512):
         """
-        Constructor
+        Constructor.
 
         :param in_channels: number of input channels
         :param out_channels: number of output channels
@@ -186,12 +186,29 @@ class UNet3D(nn.Module):
 
 
 class Reduced3DUnet(nn.Module):
+    """
+    3D U-Net with one level less than proposed in https://arxiv.org/abs/1606.06650
+
+    :ivar a_block1: High level encoder of U-net
+    :ivar a_block2: Middle level encoder of U-net
+    :ivar bottleneck: Bottleneck convolutions of U-net
+    :ivar s_block1: High level decoder of U-net
+    :ivar s_block2: Middle level decoder of U-net
+    """
     def __init__(self, in_channels, out_channels, lvl_channels=[64, 128], bottleneck_channel=256) -> None:
+        """
+        Constructor.
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        :param lvl_channels: number of channels in the 3 defined U-net levels in form of a list
+        :param bottleneck_channel: number of channels in the bottleneck
+        """
         super(Reduced3DUnet, self).__init__()
         lvl_1_chnls, lvl_2_chnls = lvl_channels[0], lvl_channels[1]
         self.a_block1 = Conv3DBlock(in_channels=in_channels, out_channels=lvl_1_chnls)
         self.a_block2 = Conv3DBlock(in_channels=lvl_1_chnls, out_channels=lvl_2_chnls)
-        self.bottleNeck = Conv3DBlock(in_channels=lvl_2_chnls, out_channels=bottleneck_channel, bottleneck=True)
+        self.bottleneck = Conv3DBlock(in_channels=lvl_2_chnls, out_channels=bottleneck_channel, bottleneck=True)
         self.s_block2 = UpConv3DBlock(in_channels=bottleneck_channel, skip_channels=lvl_2_chnls)
         self.s_block1 = UpConv3DBlock(in_channels=lvl_2_chnls, skip_channels=lvl_1_chnls, out_channels=out_channels,
                                       last=True)
@@ -201,7 +218,7 @@ class Reduced3DUnet(nn.Module):
         # Left path
         out, residual_lvl1 = self.a_block1(x)
         out, residual_lvl2 = self.a_block2(out)
-        out, _ = self.bottleNeck(out)
+        out, _ = self.bottleneck(out)
 
         # Right path
         out = self.s_block2(out, residual_lvl2)
@@ -210,7 +227,22 @@ class Reduced3DUnet(nn.Module):
 
 
 class InputLayerVNet(nn.Module):
+    """
+    First level encoder block V-Net.
+
+    :ivar conv: 3D Convolution
+    :ivar relu: parametric ReLU
+    :ivar bn1: first Group Normalization
+    :ivar bn2: second Group Normalization
+    :ivar down_conv: Down-Convolution
+    """
     def __init__(self, in_channels: int, out_channels: int):
+        """
+        Constructor.
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        """
         super(InputLayerVNet, self).__init__()
         self.conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels // 2, kernel_size=(5, 5, 5),
                               padding=2)
@@ -221,6 +253,12 @@ class InputLayerVNet(nn.Module):
                                    stride=2)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: Input
+        :return: Residual (skip) link and output
+        """
         out = self.relu(self.bn1(self.conv(x)))
         res = torch.add(out, x)
         out = self.relu(self.bn2(self.down_conv(res)))
@@ -228,6 +266,16 @@ class InputLayerVNet(nn.Module):
 
 
 class EncodeBlockVNet1(nn.Module):
+    """
+    Second level encoder block V-Net.
+
+    :ivar conv: 3D convolution
+    :ivar relu: parametric ReLU
+    :ivar bn: First Group Normalization
+    :ivar bn2: Second Group Normalization
+    :ivar down_conv: Down-Convolution
+    :ivar do: Dropout
+    """
     def __init__(self, in_channels: int, out_channels: int):
         super(EncodeBlockVNet1, self).__init__()
         self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
@@ -236,9 +284,15 @@ class EncodeBlockVNet1(nn.Module):
         self.bn2 = nn.GroupNorm(num_groups=4, num_channels=out_channels)
         self.down_conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
                                    stride=2)
-        self.do = nn.Dropout(0.3)
+        self.do = nn.Dropout(0.5)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: Input
+        :return: Residual (skip) link and output
+        """
         out = self.relu(self.bn(self.conv(x)))
         out = self.do(out)
         out = self.relu(self.bn(self.conv(out)))
@@ -249,7 +303,26 @@ class EncodeBlockVNet1(nn.Module):
 
 
 class EncodeBlockVNet2(nn.Module):
+    """
+    Lower level encoder block V-Net.
+
+    :ivar conv: 3D convolution
+    :ivar relu: parametric ReLU
+    :ivar bn: First Group Normalization
+    :ivar bn2: Second Group Normalization
+    :ivar down_conv: Down-Convolution
+    :ivar deconv: Deconvolution
+    :ivar bottleneck: indicates whether this is the bottleneck layer
+    :ivar do: Dropout
+    """
     def __init__(self, in_channels: int, out_channels: int, bottleneck=False):
+        """
+        Constructor.
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        :param bottleneck: indicates whether this is the bottleneck layer
+        """
         super(EncodeBlockVNet2, self).__init__()
         self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
         self.relu = nn.PReLU()
@@ -257,12 +330,18 @@ class EncodeBlockVNet2(nn.Module):
         self.bn2 = nn.GroupNorm(num_groups=4, num_channels=out_channels)
         self.down_conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
                                    stride=2)
-        self.up_conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
-                                          stride=2)
+        self.deconv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                         stride=2)
         self.bottleneck = bottleneck
-        self.do = nn.Dropout(0.3)
+        self.do = nn.Dropout(0.5)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: Input
+        :return: Residual (skip) link and output OR output
+        """
         out = self.relu(self.bn(self.conv(x)))
         out = self.do(out)
         out = self.relu(self.bn(self.conv(out)))
@@ -274,58 +353,127 @@ class EncodeBlockVNet2(nn.Module):
             out = self.relu(self.bn2(self.down_conv(res)))
             return res, out
         else:
-            return self.relu(self.bn(self.up_conv(res)))
+            return self.relu(self.bn(self.deconv(res)))
 
 
 class DecodeBlockVnet2(nn.Module):
+    """
+    Lower level decoder block V-Net.
+
+    :ivar conv: First 3D convolution
+    :ivar conv2: Second 3D convolution
+    :ivar relu: parametric ReLU
+    :ivar bn: First Group Normalization
+    :ivar deconv: Deconvolution
+    """
     def __init__(self, in_channels, out_channels):
+        """
+        Constructor.
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        """
         super(DecodeBlockVnet2, self).__init__()
-        self.conv2 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
-        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.conv = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5),
+                              padding=2)
+        self.conv2 = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
         self.relu = nn.PReLU()
         self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
-        self.up_conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
-                                          stride=2)
+        self.deconv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                         stride=2)
 
     def forward(self, x, skip):
+        """
+        Forward pass.
+
+        :param x: input
+        :param skip: residual connection
+        :return: output
+        """
         out = torch.cat((x, skip), dim=1)
+        out = self.relu(self.bn(self.conv(out)))
         out = self.relu(self.bn(self.conv2(out)))
-        out = self.relu(self.bn(self.conv(out)))
-        out = self.relu(self.bn(self.conv(out)))
+        out = self.relu(self.bn(self.conv2(out)))
         out = torch.add(out, x)
-        out = self.up_conv(out)
+        out = self.deconv(out)
         return out
 
 
 class DecodeBlockVnet1(nn.Module):
+    """
+    Second level decoder block V-Net.
+
+    :ivar conv: First 3D convolution
+    :ivar conv2: Second 3D convolution
+    :ivar relu: parametric ReLU
+    :ivar bn: First Group Normalization
+    :ivar deconv: Deconvolution
+    """
     def __init__(self, in_channels, out_channels):
+        """
+        Constructor.
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        """
         super(DecodeBlockVnet1, self).__init__()
-        self.conv2 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
-        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.conv = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5),
+                              padding=2)
+        self.conv2 = nn.Conv3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
         self.relu = nn.PReLU()
         self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
-        self.up_conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
-                                          stride=2)
+        self.deconv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(2, 2, 2),
+                                         stride=2)
 
     def forward(self, x, skip):
+        """
+        Forward pass.
+
+        :param x: input
+        :param skip: residual connection
+        :return: output
+        """
         out = torch.cat((x, skip), dim=1)
-        out = self.relu(self.bn(self.conv2(out)))
         out = self.relu(self.bn(self.conv(out)))
+        out = self.relu(self.bn(self.conv2(out)))
         out = torch.add(out, x)
-        out = self.up_conv(out)
+        out = self.deconv(out)
         return out
 
 
 class OutputLayerVnet(nn.Module):
+    """
+    First level decoder block V-Net.
+
+    :ivar conv1: First 3D convolution
+    :ivar conv2: Second 3D convolution
+    :ivar relu: parametric ReLU
+    :ivar bn: First Group Normalization
+    :ivar activation: Softmax
+    """
     def __init__(self, in_channels, out_channels):
+        """
+        Constructor.
+
+        :param in_channels: number of input channels
+        :param out_channels: number of output channels
+        """
         super(OutputLayerVnet, self).__init__()
-        self.conv1 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5), padding=2)
+        self.conv1 = nn.Conv3d(in_channels=int(in_channels * 1.5), out_channels=in_channels, kernel_size=(5, 5, 5),
+                               padding=2)
         self.relu = nn.PReLU()
         self.bn = nn.GroupNorm(num_groups=4, num_channels=in_channels)
         self.conv2 = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=1)
         self.activation = nn.Softmax(1)
 
     def forward(self, x, skip):
+        """
+        Forward pass.
+
+        :param x: input
+        :param skip: residual connection
+        :return: output
+        """
         out = torch.cat((x, skip), dim=1)
         out = self.relu(self.bn(self.conv1(out)))
         out = torch.add(out, x)
@@ -337,6 +485,19 @@ class OutputLayerVnet(nn.Module):
 
 
 class VNet(nn.Module):
+    """
+    V-Net according to https://arxiv.org/abs/1606.04797
+
+    :ivar encoder1: First level encoder
+    :ivar encoder2: Second level encoder
+    :ivar encoder3: Third level encoder
+    :ivar encoder4: Fourth level encoder
+    :ivar bottleneck: Bottleneck
+    :ivar decoder4: Fourth level decoder
+    :ivar decoder3: Third level decoder
+    :ivar decoder2: Second level decoder
+    :ivar decoder1: First level decoder
+    """
     def __init__(self):
         super(VNet, self).__init__()
         self.encoder1 = InputLayerVNet(in_channels=1, out_channels=32)
@@ -350,6 +511,12 @@ class VNet(nn.Module):
         self.decoder1 = OutputLayerVnet(in_channels=32, out_channels=2)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: input
+        :return: output
+        """
         skip1, out = self.encoder1(x)
         skip2, out = self.encoder2(out)
         skip3, out = self.encoder3(out)
@@ -364,6 +531,17 @@ class VNet(nn.Module):
 
 
 class ReducedVNet(nn.Module):
+    """
+    Reduced V-Net with one level less than the original V-Net.
+
+    :ivar encoder1: First level encoder
+    :ivar encoder2: Second level encoder
+    :ivar encoder3: Third level encoder
+    :ivar bottleneck: Bottleneck
+    :ivar decoder3: Third level decoder
+    :ivar decoder2: Second level decoder
+    :ivar decoder1: First level decoder
+    """
     def __init__(self):
         super(ReducedVNet, self).__init__()
         self.encoder1 = InputLayerVNet(in_channels=1, out_channels=32)
@@ -375,6 +553,12 @@ class ReducedVNet(nn.Module):
         self.decoder1 = OutputLayerVnet(in_channels=32, out_channels=2)
 
     def forward(self, x):
+        """
+        Forward pass.
+
+        :param x: input
+        :return: output
+        """
         skip1, out = self.encoder1(x)
         skip2, out = self.encoder2(out)
         skip3, out = self.encoder3(out)

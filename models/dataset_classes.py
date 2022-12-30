@@ -120,14 +120,15 @@ class Experiment4(ABC):
 
     :ivar subjects: list of torchio Subject instances
     """
-    def __init__(self, subject_path, new_labels):
+    def __init__(self, subject_path, new_labels=[None]):
         """
         :param subject_path: relative path to the fMRI sequence
         :param new_labels: List of sequence numbers which have a different mask
         """
         single_imgs = Path(op.join(sys.path[0], subject_path + '/single_images'))
         regex = re.compile(r'\d+')
-        cop = tio.CropOrPad((160, 64, 40))
+        cop = tio.CropOrPad((160, 64, 48))
+        cop = tio.CropOrPad((144, 48, 32))
 
         self.subjects = []
         # assign masks to images
@@ -190,7 +191,7 @@ class Experiment4(ABC):
             affine: 1,
             scaling: 1,
             elastic: 1,
-            none: 15  # don't transform all data
+            none: 6  # don't transform all data
         }
         all_transforms = tio.OneOf(transforms_dict)
 
@@ -202,6 +203,13 @@ class Experiment4(ABC):
         set_split = 0.2
         dataset_size = len(new_dataset)
         indices = list(range(dataset_size))
+
+        quarter = int(np.floor(0.2 * dataset_size))
+        new_indices = indices[:quarter]
+        new_dataset = Subset(new_dataset, new_indices)
+
+        dataset_size = len(new_dataset)
+        indices = list(range(dataset_size))
         split = int(np.floor(set_split * dataset_size))
         train_indices, test_indices = indices[split:], indices[:split]
 
@@ -209,3 +217,33 @@ class Experiment4(ABC):
         test_set = Subset(new_dataset, test_indices)
 
         return train_set, test_set
+
+
+def divide_data2(data, test, image_dimensions=(160, 64, 35)):
+    """
+    Splits the data into subset for training and validation and a subset for testing the model.
+    Used for training the 2D U-Net.
+
+    :param image_dimensions: Desired dimension of images. Images are cropped/padded accordingly
+    :return: Tuple of (train_val_set, test_set)
+    """
+    # list of images and labels
+    image_files = []
+    image_labels = []
+    test_images = []
+    test_labels = []
+
+    for subject in data:
+        image_files.append(subject['img'])
+        image_labels.append(subject['label'])
+    for subject in test:
+        test_images.append(subject['img'])
+        test_labels.append(subject['label'])
+
+    # Create Datasets
+    dataset = SpinalCordDataset(image_labels, image_files, tio.CropOrPad(image_dimensions),
+                                tio.CropOrPad(image_dimensions))
+    test_set = SpinalCordDataset(test_labels, test_images, tio.CropOrPad(image_dimensions),
+                                 tio.CropOrPad(image_dimensions))
+
+    return dataset, test_set

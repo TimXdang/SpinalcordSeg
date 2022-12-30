@@ -2,6 +2,7 @@ import sys
 import torch
 from tqdm import tqdm as tqdm
 from segmentation_models_pytorch.utils.meter import AverageValueMeter
+import segmentation_models_pytorch.utils as smpu
 
 
 # adaptions made to the classes from segmentation models
@@ -41,7 +42,9 @@ class Epoch:
 
         logs = {}
         loss_meter = AverageValueMeter()
+        old_loss = smpu.losses.DiceLoss()
         metrics_meters = {metric.__name__: AverageValueMeter() for metric in self.metrics}
+        old_loss_meter = {'old_dice': AverageValueMeter()}
 
         with tqdm(
                 dataloader,
@@ -60,6 +63,11 @@ class Epoch:
                 loss_meter.add(loss_value)
                 loss_logs = {self.loss.__name__: loss_meter.mean}
                 logs.update(loss_logs)
+
+                old_dice = old_loss(y_pred, y).cpu().detach().numpy()
+                old_loss_meter['old_dice'].add(old_dice)
+                old_logs = {'old_dice': old_loss_meter['old_dice'].mean}
+                logs.update(old_logs)
 
                 # update metrics logs
                 for metric_fn in self.metrics:
@@ -137,7 +145,15 @@ class ValidEpoch(Epoch):
 
 
 class EarlyStopping:
-    def __init__(self, patience=5, min_delta=0):
+    """
+    Early stopping to stop training if no improvement.
+
+    :ivar patience: patience (number of epochs without improvement until stop)
+    :ivar min_delta: threshold by how much loss should improve at least
+    :ivar counter: counts epochs without improvement
+    :ivar early_stop: indicates whether training should be stopped
+    """
+    def __init__(self, patience: int = 5, min_delta: float = 0):
 
         self.patience = patience
         self.min_delta = min_delta

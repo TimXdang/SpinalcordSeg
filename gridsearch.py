@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 
-from models.models import UNet2DRemake, UNet3D
+from models.models import UNet2DRemake, UNet3D, Reduced3DUnet
 import segmentation_models_pytorch.utils as smpu
 from models.dataset_classes import *
 from utils import *
@@ -17,18 +17,19 @@ device = torch.device(#'cpu'
                       )
 # model = UNet2DRemake().model
 model = UNet3D(in_channels=1, out_channels=1)
+# model = Reduced3DUnet(in_channels=1, out_channels=1)
 loss = smpu.losses.DiceLoss()
-loss = VolDiceLoss('sigmoid')
+loss = VolDiceLoss()
 metrics = [smpu.metrics.IoU(threshold=0.5), ]
 metrics = [JaccardIndex(), ]
 
-num_epochs = 5
+num_epochs = 12
 batch_size = 12
 # define after how many epochs the learning rate shall be changed
 epochs_to_decay = 50
 reduced_lr = 1e-5
 
-optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.2), ])
+optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.5), ])
 
 # set up training and validation
 # train_epoch = smpu.train.TrainEpoch(model=model, loss=loss, metrics=metrics, optimizer=optimizer,
@@ -61,19 +62,19 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
     val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
 
     if fold == 1:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.3), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.01), ])
         train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
     if fold == 2:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.1), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.001), ])
         train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_sampler)
     if fold == 3:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.2), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.02), ])
         train_loader = DataLoader(dataset, batch_size=4, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=4, sampler=val_sampler)
     if fold == 4:
-        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.2), ])
+        optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.02), ])
         train_loader = DataLoader(dataset, batch_size=8, sampler=train_sampler)
         val_loader = DataLoader(dataset, batch_size=8, sampler=val_sampler)
 
@@ -127,7 +128,3 @@ for fold, (train_idx, val_idx) in enumerate(splits.split(np.arange(len(dataset))
     plt.savefig(f'output/acc_curves_{fold}')
 
     plt.clf()
-
-print('Test Performance: ')
-test_loader = DataLoader(test_set, batch_size=8)
-logs = valid_epoch.run(test_loader)
