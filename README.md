@@ -70,13 +70,23 @@ The scripts for actually training models are:
 - `gridsearch.py` enables to get different loss curves and accuracy curves for comparison to find optimal
 hyperparameters
 
-Some filters do not work perfectly or can be fine-tuned by defining certain parameters upfront.
-In the `scenario_cleaner.py` file under the function `transform_scenario` the `roadside_parking_check` argument of the
-is static cleaner is set to `False` as the conversion of static vehicles into parked vehicles is not working perfectly
-and increases the runtime a lot. This can be set to `True`.
 
-The Kalman Filter which is implemented in `clean_traj_noise.py` can also be adjusted. By default, the Extended Kalman
-Filter with **Constant Acceleration and Constant Turn Rate** model is called. We also provide the Point Mass Model and
-the Constant Velocity and Constant Yaw Rate Model which can be used instead. As before the setting can be changed in
-`transform_scenario` but this time under the trajectory noise cleaner. It is also possible to set Process Noise Matrix Q
-and Measurement Noise Matrix R to self defined values.
+The possible parameters to adjust are:
+- the chosen model
+- the loss function
+- the metric(s)
+- the learning rate
+- the number of epochs
+- the batch size
+- the optimizer
+
+The current values for loss and chosen metric are printed in the terminal. After the training is finished, the loss
+curves and accuracy curves are saved in the output folder like trained model is.
+The current script also saves models after each fold and the model with the best performance on the validation set.
+
+![training results](imgs/training_results.png)
+***
+### Integration of new models
+To use newly created models for the creation of masks, define a new model in the class `ModelChoices()` in `predict.py`
+and add the option in the if else structure in the `main` function. Adapt the name of the model and the size of the
+input respectively.
